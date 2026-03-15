@@ -17,7 +17,7 @@
 
     - name: Deploy vLLM systemd unit for {{ scenario }}
       ansible.builtin.template:
-        src: templates/vllm.service.j2
+        src: ../templates/vllm.service.j2
         dest: /etc/systemd/system/vllm.service
         mode: '0644'
 
@@ -154,7 +154,7 @@
       ansible.builtin.copy:
         content: |
           #!/bin/sh
-          exec ssh -i "{{ playbook_dir }}/../ssh/aip-intern-generated-key.pem" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$@"
+          exec ssh -i "{{ playbook_dir }}/../../ssh/aip-intern-generated-key.pem" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$@"
         dest: /tmp/aip_intern_rsync_ssh.sh
         mode: '0755'
       delegate_to: localhost
