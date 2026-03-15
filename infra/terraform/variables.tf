@@ -1,8 +1,3 @@
-variable "aws_region" {
-    type = string
-    default = "ap-northeast-1"
-}
-
 variable "region" {
   description = "AWS region"
   type        = string

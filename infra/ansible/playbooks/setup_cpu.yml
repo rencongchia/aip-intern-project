@@ -159,3 +159,27 @@
     - name: Show NeMo Evaluator version
       debug:
         msg: "nemo-evaluator-launcher {{ nemo_version.stdout }}"
+
+    # --- aip-intern-project ---
+    - name: Create venv-aip-intern
+      become: false
+      command: python3.11 -m venv ~/venv-aip-intern
+      args:
+        creates: ~/venv-aip-intern/bin/activate
+
+    - name: Install aip-intern-project (editable)
+      become: false
+      pip:
+        name: ".[dev]"
+        chdir: /home/ubuntu/aip-intern-project
+        virtualenv: ~/venv-aip-intern
+        editable: true
+        state: present
+
+    - name: Install extra CPU packages
+      become: false
+      pip:
+        name: "{{ item }}"
+        virtualenv: ~/venv-aip-intern
+        state: present
+      loop: "{{ extra_cpu_packages }}"

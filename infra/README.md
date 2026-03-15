@@ -28,4 +28,4 @@ infra/
 
 ## Note for interns
 
-The Terraform files need to be adapted from `phase2/infra/` in the parent `moe-optimization-example` repo (tag substitution: `phase2-*` → `aip-intern-*`). This was not automated to avoid dependencies on the parent repo structure.
+The Terraform files are fully adapted from `phase2/infra/` in the parent `moe-optimization-example` repo (tag substitution: `phase2-*` → `aip-intern-*`).

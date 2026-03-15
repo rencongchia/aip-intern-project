@@ -7,3 +7,31 @@ repo_name: "aip-intern-project"
 extra_cpu_packages:
   - crewai>=0.80
   - langchain-mcp-adapters>=0.1
+
+# Scenarios used by run_sweep.yml
+scenarios:
+  baseline:
+    model: Qwen/Qwen3-32B-Instruct
+    vllm_env: {}
+    vllm_args:
+      - "--tensor-parallel-size 4"
+      - "--max-model-len 4096"
+      - "--gpu-memory-utilization 0.90"
+      - "--trust-remote-code"
+  mesh:
+    model: Qwen/Qwen3-32B-Instruct
+    vllm_env: {}
+    vllm_args:
+      - "--tensor-parallel-size 4"
+      - "--max-model-len 4096"
+      - "--gpu-memory-utilization 0.90"
+      - "--trust-remote-code"
+
+aiperf_concurrency_levels: [1, 2, 4, 8, 16, 32, 64]
+aiperf_timeout: 1800          # seconds per concurrency level (30 min)
+
+skip_nemo_eval: false
+skip_aiperf: false
+vllm_health_retries: 360      # × 10s = 60 min max
+vllm_health_delay: 10
+nemo_eval_timeout: 7200       # 2-hour ceiling per scenario
