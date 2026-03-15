@@ -15,7 +15,6 @@ subclasses so Phase 3 can intercept and score them.
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -71,7 +70,7 @@ async def _invoke_with_tools(llm, messages, tools):
             except Exception as e:
                 raise MalformedOutputError(f"Tool {tc['name']} failed: {e}") from e
             messages.append(ToolMessage(content=str(result), tool_call_id=tc["id"]))
-    return response
+    raise MalformedOutputError("_invoke_with_tools: exceeded 10 iterations without a non-tool response")
 
 
 async def triage_node(

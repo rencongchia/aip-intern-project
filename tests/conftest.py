@@ -28,7 +28,11 @@ def mock_llm():
     llm.ainvoke = AsyncMock(
         return_value=AIMessage(
             content="mock response",
-            usage_metadata={"input_tokens": 100, "output_tokens": 50, "total_tokens": 150},
+            usage_metadata={
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "total_tokens": 150,
+            },
         )
     )
     llm.bind_tools = MagicMock(return_value=llm)
