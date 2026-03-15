@@ -1,0 +1,9 @@
+# aip-intern-project Ansible variables
+vllm_version: "0.12.0"
+python_version: "3.11"
+repo_name: "aip-intern-project"
+
+# Additional deps beyond phase2 baseline
+extra_cpu_packages:
+  - crewai>=0.80
+  - langchain-mcp-adapters>=0.1
