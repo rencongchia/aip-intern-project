@@ -45,3 +45,12 @@ def test_run_config_fields():
         artifacts_dir=Path("artifacts/"),
     )
     assert cfg.config_path == Path("config/baseline.yaml")
+
+def test_create_llm_returns_instance():
+    from aip_intern.core.llm import create_llm
+    from aip_intern.core.config import LLMCfg
+    from langchain_openai import ChatOpenAI
+
+    cfg = LLMCfg(model="test", base_url="http://localhost:8000/v1", api_key="x")
+    llm = create_llm(cfg)
+    assert isinstance(llm, ChatOpenAI)
