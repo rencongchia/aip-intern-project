@@ -1,0 +1,12 @@
+# Local dev stack for aip-intern-project
+# Run: docker compose up
+# toxiproxy is present but DISABLED — Phase 4 intern enables it for GCC simulation
+
+services:
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    profiles: ["gcc-sim"]          # only starts with: docker compose --profile gcc-sim up
+    ports:
+      - "8474:8474"                # toxiproxy API
+      - "18000:18000"              # proxied LLM port (Phase 4 configures rules here)
+    # Phase 4 intern: add network rules via toxiproxy API or config file mount
