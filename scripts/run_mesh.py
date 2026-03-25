@@ -14,6 +14,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from dotenv import load_dotenv
+load_dotenv()  # Load .env before config resolves ${ENV_VAR} placeholders
+
 from aip_intern.baseline.runner import RunConfig
 from aip_intern.core.config import load_config
 from aip_intern.mesh.runner import run
@@ -52,6 +55,7 @@ def main() -> None:
     results = asyncio.run(run(run_cfg))
     passed = sum(r.success for r in results)
     print(f"\nComplete: {passed}/{len(results)} runs succeeded.")
+    print(f"Artifacts: {run_cfg.artifacts_dir}/")
 
 
 if __name__ == "__main__":

@@ -31,6 +31,8 @@ def load_runs(artifacts_dir: str | Path, prefix: str = "") -> pd.DataFrame:
         message_count, state_size_bytes.
     """
     artifacts_dir = Path(artifacts_dir)
+    if not artifacts_dir.exists():
+        return pd.DataFrame()
     rows = []
     for run_dir in sorted(artifacts_dir.iterdir()):
         if not run_dir.is_dir():

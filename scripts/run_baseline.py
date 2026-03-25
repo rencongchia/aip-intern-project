@@ -17,6 +17,9 @@ from pathlib import Path
 # Allow running from repo root without installing
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from dotenv import load_dotenv
+load_dotenv()  # Load .env before config resolves ${ENV_VAR} placeholders
+
 from aip_intern.baseline.runner import RunConfig, run
 from aip_intern.core.config import load_config
 
