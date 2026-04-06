@@ -6,6 +6,7 @@
 run:
   n_runs: 5
   run_id_prefix: "failures"
+  inter_run_delay_s: 5  # seconds to sleep between runs; avoids OpenRouter free-tier rate limits
 
 fault_types:
   - name: "timeout"
@@ -17,7 +18,7 @@ fault_types:
     token_limit: 500
 
 llm:
-  model: "openai/meta-llama/llama-3.2-3b-instruct:free"
+  model: "openai/google/gemma-3-4b-it:free"
   base_url: "${OPENAI_BASE_URL}"
   api_key: "${OPENAI_API_KEY}"
   temperature: 0.0

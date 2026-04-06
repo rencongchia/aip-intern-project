@@ -45,6 +45,7 @@ def _resolve_dict(d: dict) -> dict:
 class RunCfg:
     n_runs: int = 20
     run_id_prefix: str = "run"
+    inter_run_delay_s: float = 0.0
 
 
 @dataclass(frozen=True)

@@ -202,9 +202,12 @@ async def run(cfg: RunConfig, fault_types: list[FaultRunConfig]) -> list[RunResu
     Runs each fault type cfg.n_runs times. Returns all RunResult objects ordered
     by fault_type then run number.
     """
+    import asyncio
+
     results = []
     total = cfg.n_runs * len(fault_types)
     completed = 0
+    inter_run_delay_s = getattr(cfg, "inter_run_delay_s", 0)
     for fault in fault_types:
         for i in range(cfg.n_runs):
             completed += 1
@@ -218,4 +221,6 @@ async def run(cfg: RunConfig, fault_types: list[FaultRunConfig]) -> list[RunResu
             status = "OK" if result.success else f"ERR: {result.error[:60]}"
             print(status)
             results.append(result)
+            if inter_run_delay_s > 0 and completed < total:
+                await asyncio.sleep(inter_run_delay_s)
     return results

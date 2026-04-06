@@ -83,6 +83,7 @@ def main() -> None:
         workspace_root=Path(app_cfg.mcp.workspace_root),
         artifacts_dir=Path(app_cfg.artifacts.output_dir),
     )
+    run_cfg.inter_run_delay_s = app_cfg.run.inter_run_delay_s  # type: ignore[attr-defined]
 
     # Filter to specific fault type if requested
     if args.fault:

@@ -6,7 +6,7 @@ run:
   run_id_prefix: "mesh"
 
 llm:
-  model: "openai/meta-llama/llama-3.2-3b-instruct:free"
+  model: "openai/google/gemma-3-4b-it:free"
   base_url: "${OPENAI_BASE_URL}"
   api_key: "${OPENAI_API_KEY}"
   temperature: 0.0

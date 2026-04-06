@@ -77,45 +77,55 @@ def inject_timeout(node_fn: Callable, after_seconds: float = 5.0) -> Callable:
 
 
 def inject_malformed_json(node_fn: Callable, fail_on_call: int = 1) -> Callable:
-    """Wrap a node to raise a JSONDecodeError on the Nth tool call inside the crew.
+    """Wrap a node to raise a JSONDecodeError inside crew_node's try block.
 
-    Patches tool._run on all tools across all crew agents. The call counter is
-    shared across all tools, counting total tool invocations in the crew run order.
+    Patches crew.kickoff_async (accessible via the 'crew' kwarg) to raise
+    JSONDecodeError immediately. This error is caught by crew_node's broad
+    `except Exception` handler and stored as state['error']. The graph reaches
+    END normally (automatic recovery). No real LLM call is made.
 
-    The JSONDecodeError is caught by crew_node's broad `except Exception` handler and
-    stored as state['error']. The graph reaches END normally (automatic recovery).
-    t_fault is NOT on an exception — read it via wrapped_fn.t_fault_holder[0] after
-    the graph completes.
+    This approach is environment-agnostic: it does not require the LLM to respond
+    or call tools. The original tool._run patch is kept as a fallback for ReAct
+    agents that do reach tool calls, but the kickoff patch fires first.
+
+    t_fault is NOT on an exception — read it via wrapped_fn.t_fault_holder[0]
+    after the graph completes.
 
     Args:
         node_fn: The original async node function (crew_node).
-        fail_on_call: Which tool call invocation to corrupt (1-indexed, across all tools).
+        fail_on_call: Ignored in the current implementation (kickoff always raises).
+            Preserved for API compatibility.
 
     Returns:
         Wrapped async function. Has attribute t_fault_holder: list[float | None].
     """
     t_fault_holder: list[float | None] = [None]
 
+    class _MalformedJsonCrew:
+        """Proxy that intercepts kickoff_async to raise JSONDecodeError.
+
+        All other attribute accesses are forwarded to the real crew.
+        This avoids patching Pydantic models (which reject arbitrary setattr).
+        """
+        def __init__(self, real_crew: object) -> None:
+            self._real = real_crew
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._real, name)
+
+        async def kickoff_async(self, **kw: object) -> None:
+            t_fault_holder[0] = time.time()
+            raise json.JSONDecodeError(
+                "Injected malformed JSON: crew output could not be parsed", "", 0
+            )
+
     async def wrapped(state, **kwargs):
         crew = kwargs.get("crew")
         if crew is not None:
-            call_counter = [0]
-            for agent in crew.agents:
-                for tool in agent.tools:
-                    original_run = tool._run
-
-                    def _make_patched(orig, counter, holder, n):
-                        def patched(*args, **kw):
-                            counter[0] += 1
-                            if counter[0] == n:
-                                holder[0] = time.time()
-                                raise json.JSONDecodeError(
-                                    "Injected malformed JSON from tool call", "", 0
-                                )
-                            return orig(*args, **kw)
-                        return patched
-
-                    tool._run = _make_patched(original_run, call_counter, t_fault_holder, fail_on_call)
+            # Replace the real crew with a proxy that raises JSONDecodeError from
+            # inside crew.kickoff_async(). crew_node's `except Exception` catches
+            # this → stores in state['error'] → graph reaches END (automatic recovery).
+            kwargs["crew"] = _MalformedJsonCrew(crew)
 
         return await node_fn(state, **kwargs)
 

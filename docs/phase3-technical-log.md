@@ -122,3 +122,24 @@ The previous contributor (Darren/Eunice, using Claude Code autonomously) left al
 
 **Standardisation rule**: For CrewAI + OpenAI-compatible endpoint (OpenRouter, local vLLM, etc.) → always use `openai/MODEL_NAME`. For LangChain ChatOpenAI → use bare `MODEL_NAME`.
 
+
+---
+
+## 2026-04-06 — Model availability failures during run (bug fix)
+
+**Problem**: During live Phase 3 runs, multiple free OpenRouter models failed:
+- `meta-llama/llama-3.2-3b-instruct:free`: upstream rate-limited by Venice provider (429)
+- `meta-llama/llama-3.1-8b-instruct:free`: endpoint removed from OpenRouter (404)
+- `openai/gpt-oss-20b:free` and `openai/gpt-oss-120b:free`: connect 200 OK but CrewAI agent gets "None or empty response" — these models respond with native tool_calls (content=null), which CrewAI's ReAct agent can't parse as text
+- `google/gemma-3-4b-it:free`: returns proper ReAct text, but was rate-limited mid-run
+
+**Root cause**: OpenRouter free tier has two layers of failure: (a) per-provider upstream rate limits, (b) model-format incompatibility (native tool_calls vs ReAct text). Models served by Venice fail most frequently.
+
+**Resolution**: Rewrote inject_malformed_json and inject_timeout to not require LLM calls:
+- **inject_timeout** (already fixed): pre-sleep for `after_seconds*2` inside `asyncio.wait_for()`; timeout always fires; no LLM call made.
+- **inject_malformed_json** (fixed now): proxy class `_MalformedJsonCrew` replaces the real crew kwarg before calling node_fn. The proxy's `kickoff_async()` raises `json.JSONDecodeError` unconditionally; `crew_node`'s `except Exception` catches it → `state['error']` set → automatic recovery. No LLM call needed.
+- **inject_checkpoint_loss**: crew_node catches all LLM errors internally and returns normally; the CheckpointLostError is then raised after node_fn returns. Works regardless of LLM rate limits.
+- **inject_context_overflow**: fires before any LLM call (token count pre-check). Unaffected.
+
+**Model selection for checkpoint_loss**: any available free model works since crew_node handles all LLM errors. Use `google/gemma-3-4b-it:free` as default. If rate-limited, checkpoint_loss still records correctly (recovery_mode=manual, output_quality=0.0 since crew didn't complete).
+
