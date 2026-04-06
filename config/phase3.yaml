@@ -15,7 +15,7 @@ fault_types:
     fail_on_call: 1
   - name: "checkpoint_loss"
   - name: "context_overflow"
-    token_limit: 500
+    token_limit: 200  # workspace input is ~410 tokens; limit at 200 ensures reliable overflow
 
 llm:
   model: "openai/google/gemma-3-4b-it:free"
