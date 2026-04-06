@@ -55,8 +55,17 @@ def inject_timeout(node_fn: Callable, after_seconds: float = 5.0) -> Callable:
         Wrapped async function with the same signature as node_fn.
     """
     async def wrapped(state, **kwargs):
+        # Pre-sleep guarantees the timeout fires before any LLM response (including
+        # fast 429 rate-limit errors). crew_node catches all non-AIPInternError
+        # exceptions internally, so a hung LLM call would return normally — the
+        # timeout would never fire. A sleep(after_seconds * 2) always outlasts the
+        # wait_for deadline, making timeout injection reliable and environment-agnostic.
+        async def _hung():
+            await asyncio.sleep(after_seconds * 2)
+            return await node_fn(state, **kwargs)  # never reached
+
         try:
-            return await asyncio.wait_for(node_fn(state, **kwargs), timeout=after_seconds)
+            return await asyncio.wait_for(_hung(), timeout=after_seconds)
         except asyncio.TimeoutError:
             err = AgentTimeoutError(
                 f"Node timed out after {after_seconds}s (injected fault)"

@@ -104,3 +104,21 @@ The previous contributor (Darren/Eunice, using Claude Code autonomously) left al
 | context_overflow | `ContextOverflowError` raised before crew runs | manual |
 
 ---
+
+---
+
+## 2026-04-06 — litellm `openai/` prefix requirement (bug fix during run)
+
+**Problem**: After installing litellm, `crewai.LLM(model="meta-llama/llama-3.2-3b-instruct:free", base_url="https://openrouter.ai/api/v1", ...)` still raised `litellm.BadRequestError: LLM Provider NOT provided`. Installing litellm alone does not solve the provider detection issue — litellm still requires a provider prefix in the model name even when a custom `base_url` is given.
+
+**Root cause**: litellm's model routing is done by parsing the model string prefix, not by inspecting the `base_url`. A bare model name like `meta-llama/llama-3.2-3b-instruct:free` has no recognised prefix → litellm cannot determine which API format to use.
+
+**Options considered**:
+1. `openrouter/MODEL` — uses litellm's native OpenRouter provider (looks for `OPENROUTER_API_KEY`; incompatible with our `OPENAI_API_KEY` env var).
+2. `openai/MODEL` with custom `base_url` — tells litellm "use OpenAI API format, send to this URL". Works with any OpenAI-compatible endpoint; `OPENAI_API_KEY` is used as-is.
+3. Auto-prefix in `_build_crew()` — brittle, hard to test.
+
+**Decision**: Option 2 — prefix all CrewAI model names with `openai/`. Both `config/mesh.yaml` and `config/phase3.yaml` updated to `openai/meta-llama/llama-3.2-3b-instruct:free`. Baseline uses LangChain `ChatOpenAI` which does NOT need a prefix (it uses `base_url` directly), so `baseline.yaml` stays unchanged.
+
+**Standardisation rule**: For CrewAI + OpenAI-compatible endpoint (OpenRouter, local vLLM, etc.) → always use `openai/MODEL_NAME`. For LangChain ChatOpenAI → use bare `MODEL_NAME`.
+
