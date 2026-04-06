@@ -52,5 +52,13 @@ def load_runs(artifacts_dir: str | Path, prefix: str = "") -> pd.DataFrame:
             "step_trace_len": len(m.get("step_trace", [])),
             "message_count": m.get("message_count"),
             "state_size_bytes": m.get("state_size_bytes"),
+            # Phase 3 fault injection fields (None for Phase 1-2 runs)
+            "failure_type": m.get("failure_type"),
+            "recovery_time_s": m.get("recovery_time_s"),
+            "output_quality": m.get("output_quality"),
+            "recovery_mode": m.get("recovery_mode"),
+            "notes": m.get("notes", ""),
+            # Phase 4 GCC simulation flag
+            "gcc_sim": m.get("gcc_sim", False),
         })
     return pd.DataFrame(rows)
