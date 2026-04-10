@@ -58,7 +58,10 @@ def load_runs(artifacts_dir: str | Path, prefix: str = "") -> pd.DataFrame:
             "output_quality": m.get("output_quality"),
             "recovery_mode": m.get("recovery_mode"),
             "notes": m.get("notes", ""),
-            # Phase 4 GCC simulation flag
+            # Phase 4 GCC simulation fields
             "gcc_sim": m.get("gcc_sim", False),
+            "gcc_latency_ms": m.get("gcc_latency_ms"),
+            "gcc_tpm_limit": m.get("gcc_tpm_limit"),
+            "gcc_rate_wait_s": m.get("gcc_rate_wait_s"),
         })
     return pd.DataFrame(rows)
