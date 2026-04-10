@@ -1,26 +1,27 @@
-"""Phase 3 fault injection sweep.
+"""Phase 4 GCC-constrained fault injection sweep.
 
-Extends the Phase 2 mesh runner with fault injection and recovery scoring.
+Re-runs the same four Phase 3 fault types under simulated GCC constraints:
+- 200ms added latency per LLM call
+- Egress proxy jitter (50ms)
+- 60k TPM rate cap
 
-run(cfg, fault_types) → list[RunResult]: execute n_runs × len(fault_types) iterations.
-run_once(cfg, fault) → RunResult: single fault-injected run.
+The key research question: which Phase 3 failures become unrecoverable
+under GCC network constraints?
 
-Each run_once():
-  1. Builds the mesh graph with the fault injector applied to crew_node.
-  2. Runs ainvoke() and captures t_fault + t_end.
-  3. Calls score_recovery() and writes RecoveryScore fields to metrics.json.
+run(cfg, fault_types, gcc) → list[RunResult]
+run_once(cfg, fault, gcc) → RunResult
 
-metrics.json for Phase 3 runs has all standard mesh fields PLUS:
-  - failure_type, recovery_time_s, output_quality, recovery_mode, notes
-
-Usage from notebooks:
-    from aip_intern.phase3.runner import FaultRunConfig, run
-    results = asyncio.run(run(run_cfg, fault_types))
+metrics.json for Phase 4 adds:
+  - gcc_sim: True
+  - gcc_latency_ms: configured latency
+  - gcc_tpm_limit: configured TPM cap
+  - gcc_rate_wait_s: total seconds spent waiting for rate limit
 """
 
 from __future__ import annotations
 
 import dataclasses
+import json
 import time
 import uuid
 from dataclasses import dataclass
@@ -43,31 +44,40 @@ from aip_intern.mesh.crew_node import crew_node
 from aip_intern.mesh.graph import _build_crew
 from aip_intern.mesh.nodes import supervisor_node
 from aip_intern.mesh.state import MeshState
+from aip_intern.phase4.gcc_constraints import GCCConstraints, apply_gcc_constraints
 
 from langgraph.graph import END, START, StateGraph
 
 
 @dataclass
-class FaultRunConfig:
-    """Parameters for a single fault type.
+class GCCRunConfig:
+    """GCC constraint parameters from config YAML."""
 
-    Used by run() to parametrize run_once() across the 4 fault types.
-    """
-    fault_name: str           # "timeout" | "malformed_json" | "checkpoint_loss" | "context_overflow"
-    after_seconds: float = 3.0    # inject_timeout: deadline in seconds
-    fail_on_call: int = 1         # inject_malformed_json: which tool call to corrupt
-    token_limit: int = 500        # inject_context_overflow: token threshold
+    latency_ms: int = 200
+    egress_jitter_ms: int = 50
+    tpm_limit: int = 60_000
 
 
-def _build_fault_graph(
+# Reuse FaultRunConfig from Phase 3
+from aip_intern.phase3.runner import FaultRunConfig
+
+
+def _build_gcc_fault_graph(
     llm_cfg: LLMCfg,
     workspace_root: Path,
     fault: FaultRunConfig,
+    gcc: GCCConstraints,
     artifacts_outputs: Path | None = None,
 ):
-    """Build a mesh StateGraph with the specified fault injector applied to crew_node."""
+    """Build a mesh StateGraph with fault injection + GCC constraints.
+
+    Layering order: crew_node → fault injector → GCC constraints.
+    GCC constraints wrap the outer layer so latency/rate-limit is applied
+    even when the fault fires before the LLM call.
+    """
     crew = _build_crew(llm_cfg, workspace_root)
 
+    # Layer 1: fault injection
     if fault.fault_name == "timeout":
         injected = inject_timeout(crew_node, after_seconds=fault.after_seconds)
     elif fault.fault_name == "malformed_json":
@@ -83,12 +93,15 @@ def _build_fault_graph(
     else:
         raise ValueError(f"Unknown fault_name: {fault.fault_name!r}")
 
+    # Layer 2: GCC constraints wrap the fault-injected node
+    constrained = apply_gcc_constraints(injected, gcc)
+
     builder = StateGraph(MeshState)
     builder.add_node("supervisor_node", supervisor_node)
     builder.add_node(
         "crew_node",
         partial(
-            injected,
+            constrained,
             crew=crew,
             workspace_root=workspace_root,
             artifacts_outputs=artifacts_outputs,
@@ -98,16 +111,14 @@ def _build_fault_graph(
     builder.add_edge("supervisor_node", "crew_node")
     builder.add_edge("crew_node", END)
 
-    return builder.compile(), injected  # return injected so runner can read t_fault_holder
+    return builder.compile(), constrained
 
 
-async def run_once(cfg: RunConfig, fault: FaultRunConfig) -> RunResult:
-    """Execute a single fault-injected mesh run.
-
-    Creates a fresh run_id, builds the fault graph, ainvokes it, scores recovery,
-    and writes extended metrics.json (base mesh fields + RecoveryScore fields).
-    """
-    fault_prefix = f"failures_{fault.fault_name.replace('_', '')}"
+async def run_once(
+    cfg: RunConfig, fault: FaultRunConfig, gcc: GCCConstraints
+) -> RunResult:
+    """Execute a single GCC-constrained fault-injected mesh run."""
+    fault_prefix = f"gcc_{fault.fault_name.replace('_', '')}"
     run_id = f"{fault_prefix}_{uuid.uuid4().hex[:8]}"
     artifacts_run_dir = cfg.artifacts_dir / run_id
     outputs_dir = artifacts_run_dir / "outputs"
@@ -141,7 +152,9 @@ async def run_once(cfg: RunConfig, fault: FaultRunConfig) -> RunResult:
         "completion_tokens": 0,
     }
 
-    graph, injected_node = _build_fault_graph(llm_cfg, cfg.workspace_root, fault, artifacts_outputs=outputs_dir)
+    graph, constrained_node = _build_gcc_fault_graph(
+        llm_cfg, cfg.workspace_root, fault, gcc, artifacts_outputs=outputs_dir
+    )
 
     t_run_start = time.time()
     t_fault: float | None = None
@@ -162,14 +175,13 @@ async def run_once(cfg: RunConfig, fault: FaultRunConfig) -> RunResult:
         success = error_msg is None
         if not success:
             metrics.error = error_msg
-        graph_reached_end = True  # graph reached END (even if error stored in state)
+        graph_reached_end = True
     except AIPInternError as e:
         metrics.total_latency_s = time.perf_counter() - t0
         success = False
         error_msg = str(e)
         metrics.error = error_msg
         graph_reached_end = False
-        # t_fault is attached to the exception for injectors that raise directly
         t_fault = getattr(e, "t_fault", None)
         # checkpoint_loss: crew ran (tokens spent) but state was discarded
         node_result = getattr(e, "node_result", None)
@@ -185,11 +197,9 @@ async def run_once(cfg: RunConfig, fault: FaultRunConfig) -> RunResult:
 
     t_end = time.time()
 
-    # For malformed_json: fault fires inside crew (caught internally), read from holder
-    if t_fault is None and hasattr(injected_node, "t_fault_holder"):
-        t_fault = injected_node.t_fault_holder[0]
-
-    # Fall back to run start if no injector timestamp was recorded
+    # Read t_fault from malformed_json holder if available
+    if t_fault is None and hasattr(constrained_node, "t_fault_holder"):
+        t_fault = constrained_node.t_fault_holder[0]
     if t_fault is None:
         t_fault = t_run_start
 
@@ -201,12 +211,29 @@ async def run_once(cfg: RunConfig, fault: FaultRunConfig) -> RunResult:
         graph_reached_end=graph_reached_end,
     )
 
-    # Write extended metrics: base mesh fields + RecoveryScore fields
+    # Determine if GCC constraints made this unrecoverable
+    # Unrecoverable = manual recovery AND total latency exceeds 2× the non-GCC baseline
+    # (heuristic: if GCC overhead pushed recovery_time beyond practical limits)
+    gcc_rate_wait = initial_state.get("gcc_rate_wait_s", 0.0)
+    if (
+        recovery.recovery_mode == "manual"
+        and metrics.total_latency_s > fault.after_seconds * 3
+        and gcc_rate_wait > 0
+    ):
+        recovery.recovery_mode = "unrecoverable"
+        recovery.notes += (
+            " GCC rate-limit wait caused cascading failure — "
+            "recovery not feasible within SLA."
+        )
+
+    # Write extended metrics
     metrics_dict = dataclasses.asdict(metrics)
     metrics_dict.update(dataclasses.asdict(recovery))
-    metrics_dict["gcc_sim"] = False  # Phase 4 will set True
+    metrics_dict["gcc_sim"] = True
+    metrics_dict["gcc_latency_ms"] = gcc.latency_ms
+    metrics_dict["gcc_tpm_limit"] = gcc.tpm_limit
+    metrics_dict["gcc_rate_wait_s"] = gcc_rate_wait
 
-    import json
     (artifacts_run_dir / "metrics.json").write_text(json.dumps(metrics_dict, indent=2))
 
     return RunResult(
@@ -218,28 +245,35 @@ async def run_once(cfg: RunConfig, fault: FaultRunConfig) -> RunResult:
     )
 
 
-async def run(cfg: RunConfig, fault_types: list[FaultRunConfig]) -> list[RunResult]:
-    """Execute cfg.n_runs × len(fault_types) sequential fault-injected runs.
-
-    Runs each fault type cfg.n_runs times. Returns all RunResult objects ordered
-    by fault_type then run number.
-    """
+async def run(
+    cfg: RunConfig,
+    fault_types: list[FaultRunConfig],
+    gcc_cfg: GCCRunConfig,
+) -> list[RunResult]:
+    """Execute cfg.n_runs × len(fault_types) GCC-constrained fault runs."""
     import asyncio
+
+    gcc = GCCConstraints(
+        latency_ms=gcc_cfg.latency_ms,
+        egress_jitter_ms=gcc_cfg.egress_jitter_ms,
+        tpm_limit=gcc_cfg.tpm_limit,
+    )
 
     results = []
     total = cfg.n_runs * len(fault_types)
     completed = 0
     inter_run_delay_s = getattr(cfg, "inter_run_delay_s", 0)
+
     for fault in fault_types:
         for i in range(cfg.n_runs):
             completed += 1
             print(
-                f"  Phase3 run {completed}/{total}"
+                f"  Phase4 run {completed}/{total}"
                 f" [{fault.fault_name}  {i + 1}/{cfg.n_runs}]...",
                 end=" ",
                 flush=True,
             )
-            result = await run_once(cfg, fault)
+            result = await run_once(cfg, fault, gcc)
             status = "OK" if result.success else f"ERR: {result.error[:60]}"
             print(status)
             results.append(result)

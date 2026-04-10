@@ -54,9 +54,11 @@ async def run_once(cfg: RunConfig) -> RunResult:
         "step_trace": [],
         "message_count": 0,
         "state_size_bytes": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
     }
 
-    graph = build_graph(llm_cfg, workspace_root=cfg.workspace_root)
+    graph = build_graph(llm_cfg, workspace_root=cfg.workspace_root, artifacts_outputs=outputs_dir)
 
     t0 = time.perf_counter()
     try:
@@ -65,6 +67,8 @@ async def run_once(cfg: RunConfig) -> RunResult:
         metrics.step_trace = result_state.get("step_trace", [])
         metrics.message_count = result_state.get("message_count", 0)
         metrics.state_size_bytes = result_state.get("state_size_bytes", 0)
+        metrics.total_prompt_tokens = result_state.get("prompt_tokens", 0)
+        metrics.total_completion_tokens = result_state.get("completion_tokens", 0)
         success = result_state.get("error") is None
         error_msg = result_state.get("error")
     except AIPInternError as e:

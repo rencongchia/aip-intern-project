@@ -27,7 +27,7 @@ def make_triage_specialist(llm: LLM, tools: list) -> Agent:
         backstory=_load_prompt("triage_specialist.txt"),
         llm=llm,
         tools=tools,
-        verbose=True,
+        verbose=False,
         max_iter=10,
     )
 
@@ -40,6 +40,6 @@ def make_brief_response_specialist(llm: LLM, tools: list) -> Agent:
         backstory=_load_prompt("brief_response_specialist.txt"),
         llm=llm,
         tools=tools,
-        verbose=True,
+        verbose=False,
         max_iter=10,
     )

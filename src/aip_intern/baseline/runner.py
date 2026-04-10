@@ -26,7 +26,6 @@ from aip_intern.baseline.graph import build_graph
 from aip_intern.baseline.state import BaselineState
 from aip_intern.core.exceptions import AIPInternError
 from aip_intern.core.metrics import RunMetrics
-from aip_intern.core.tools import create_mcp_tools
 from aip_intern.core.tracing import get_callback, get_langfuse
 
 
@@ -97,21 +96,22 @@ async def run_once(cfg: RunConfig) -> RunResult:
     cb = get_callback(lf)
     invoke_config = {"callbacks": [cb]} if cb else {}
 
-    # Build LLM and load MCP tools for this run
+    # Build LLM and graph — workspace files read directly by nodes (no MCP)
     llm = _make_llm(cfg)
-    tools = await create_mcp_tools(cfg.workspace_root)
-    graph = build_graph(llm, tools)
+    graph = build_graph(llm, outputs_dir=outputs_dir, workspace_root=cfg.workspace_root)
 
     initial_state: BaselineState = {
         "run_id": run_id,
         "task_description": "Triage citizen feedback → action brief → response drafts",
-        "feedback_files": [],   # nodes use MCP list_directory instead
-        "policy_content": "",   # nodes use MCP read_file instead
+        "feedback_files": [],
+        "policy_content": "",
         "triage_result": None,
         "brief_result": None,
         "response_result": None,
         "error": None,
         "step_trace": [],
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
     }
 
     t0 = time.perf_counter()
@@ -119,6 +119,8 @@ async def run_once(cfg: RunConfig) -> RunResult:
         result_state = await graph.ainvoke(initial_state, config=invoke_config)
         metrics.total_latency_s = time.perf_counter() - t0
         metrics.step_trace = result_state.get("step_trace", [])
+        metrics.total_prompt_tokens = result_state.get("prompt_tokens", 0)
+        metrics.total_completion_tokens = result_state.get("completion_tokens", 0)
         success = result_state.get("error") is None
         error_msg = result_state.get("error")
     except AIPInternError as e:

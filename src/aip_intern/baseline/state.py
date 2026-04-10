@@ -31,3 +31,7 @@ class BaselineState(TypedDict):
 
     # Observability
     step_trace: list[str]          # ordered list of node names visited, e.g. ["triage_node", ...]
+
+    # Token estimation (tiktoken cl100k_base, accumulated across nodes)
+    prompt_tokens: int
+    completion_tokens: int

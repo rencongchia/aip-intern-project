@@ -30,7 +30,13 @@ from aip_intern.mesh.tools import get_tools, set_workspace_root
 
 
 def _build_crew(llm_cfg, workspace_root: Path) -> Crew:
-    """Assemble the CrewAI Crew from agents and tasks."""
+    """Assemble the CrewAI Crew from agents and tasks.
+
+    Agents are given workspace tools (read_file, write_file, list_directory)
+    and must call them to access feedback files and write outputs. Workspace
+    content is intentionally NOT pre-injected into task descriptions —
+    measuring real tool-call traffic is the point of the mesh experiment.
+    """
     set_workspace_root(workspace_root)
     tools = get_tools()
 
@@ -50,16 +56,22 @@ def _build_crew(llm_cfg, workspace_root: Path) -> Crew:
         agents=[triage_agent, brief_agent],
         tasks=[triage_task, brief_task],
         process=Process.sequential,
-        verbose=True,
+        verbose=False,
     )
 
 
-def build_graph(llm_cfg, workspace_root: Path = Path("workspace/")):
+def build_graph(
+    llm_cfg,
+    workspace_root: Path = Path("workspace/"),
+    artifacts_outputs: Path | None = None,
+):
     """Build and compile the mesh StateGraph.
 
     Args:
         llm_cfg: LLMCfg dataclass with model, base_url, api_key etc.
         workspace_root: Path to workspace directory for CrewAI tools.
+        artifacts_outputs: Per-run artifacts/outputs/ dir; if provided,
+            crew_node will copy output files there after the crew finishes.
 
     Returns:
         Compiled LangGraph ready for ainvoke().
@@ -68,7 +80,15 @@ def build_graph(llm_cfg, workspace_root: Path = Path("workspace/")):
 
     builder = StateGraph(MeshState)
     builder.add_node("supervisor_node", supervisor_node)
-    builder.add_node("crew_node", partial(crew_node, crew=crew))
+    builder.add_node(
+        "crew_node",
+        partial(
+            crew_node,
+            crew=crew,
+            workspace_root=workspace_root,
+            artifacts_outputs=artifacts_outputs,
+        ),
+    )
 
     builder.add_edge(START, "supervisor_node")
     builder.add_edge("supervisor_node", "crew_node")

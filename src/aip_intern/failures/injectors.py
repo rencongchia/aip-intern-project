@@ -151,12 +151,17 @@ def inject_checkpoint_loss(node_fn: Callable) -> Callable:
         Wrapped async function with the same signature as node_fn.
     """
     async def wrapped(state, **kwargs):
-        await node_fn(state, **kwargs)  # crew runs; output files written to disk
+        result = await node_fn(state, **kwargs)  # crew runs; output files written to disk
         err = CheckpointLostError(
             "State checkpoint written but lost on read-back (injected fault). "
             "Output files may exist on disk but LangGraph state has no record of them."
         )
         err.t_fault = time.time()  # type: ignore[attr-defined]
+        # Preserve the node's return value on the exception so the runner can
+        # still read token counts — the crew spent real tokens even though the
+        # state update is "lost". This is part of the checkpoint asymmetry:
+        # money spent, state gone.
+        err.node_result = result  # type: ignore[attr-defined]
         raise err
 
     return wrapped
