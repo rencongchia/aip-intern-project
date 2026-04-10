@@ -6,7 +6,7 @@
 run:
   n_runs: 5
   run_id_prefix: "failures"
-  inter_run_delay_s: 5  # seconds to sleep between runs; avoids OpenRouter free-tier rate limits
+  inter_run_delay_s: 1  # short delay between runs (local model, no rate limits)
 
 fault_types:
   - name: "timeout"
@@ -18,12 +18,12 @@ fault_types:
     token_limit: 200  # workspace input is ~410 tokens; limit at 200 ensures reliable overflow
 
 llm:
-  model: "openai/google/gemma-3-4b-it:free"
+  model: "openai/openai/gpt-4o-mini"
   base_url: "${OPENAI_BASE_URL}"
   api_key: "${OPENAI_API_KEY}"
   temperature: 0.0
   max_tokens: 1024
-  request_timeout: 60
+  request_timeout: 120
 
 mcp:
   workspace_root: "workspace/"

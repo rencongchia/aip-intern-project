@@ -6,12 +6,12 @@ run:
   run_id_prefix: "mesh"
 
 llm:
-  model: "openai/google/gemma-3-4b-it:free"
+  model: "openai/openai/gpt-4o-mini"
   base_url: "${OPENAI_BASE_URL}"
   api_key: "${OPENAI_API_KEY}"
   temperature: 0.0
   max_tokens: 2048
-  request_timeout: 60
+  request_timeout: 120
 
 mcp:
   workspace_root: "workspace/"

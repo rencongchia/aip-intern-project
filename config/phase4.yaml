@@ -1,0 +1,38 @@
+# Phase 4 GCC-constrained fault injection sweep config
+# Re-runs Phase 3 fault types under simulated GCC network constraints
+# 4 fault types × 5 runs = 20 total runs
+
+run:
+  n_runs: 5
+  run_id_prefix: "gcc"
+  inter_run_delay_s: 5
+
+# Same fault types as Phase 3 — re-run under GCC constraints
+fault_types:
+  - name: "timeout"
+    after_seconds: 3.0
+  - name: "malformed_json"
+    fail_on_call: 1
+  - name: "checkpoint_loss"
+  - name: "context_overflow"
+    token_limit: 200
+
+# GCC constraint parameters
+gcc:
+  latency_ms: 200          # added latency per LLM call (simulates GCC egress)
+  egress_jitter_ms: 50     # random jitter on top of base latency
+  tpm_limit: 60000         # tokens per minute rate cap
+
+llm:
+  model: "openai/openai/gpt-4o-mini"
+  base_url: "${OPENAI_BASE_URL}"
+  api_key: "${OPENAI_API_KEY}"
+  temperature: 0.0
+  max_tokens: 1024
+  request_timeout: 120
+
+mcp:
+  workspace_root: "workspace/"
+
+artifacts:
+  output_dir: "artifacts/"
